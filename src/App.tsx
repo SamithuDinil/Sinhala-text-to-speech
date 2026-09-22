@@ -10,6 +10,9 @@ import {
   AlertCircle,
   Headphones,
   FileText,
+  Share2,
+  Info,
+  ExternalLink,
 } from 'lucide-react';
 import { VoiceName, DeliveryStyle, GeneratedClip } from './types';
 import {
@@ -34,6 +37,8 @@ export default function App() {
   const [currentClip, setCurrentClip] = useState<GeneratedClip | null>(null);
   const [history, setHistory] = useState<GeneratedClip[]>([]);
   const [copied, setCopied] = useState(false);
+  const [shareToast, setShareToast] = useState<string | null>(null);
+  const [showInfoModal, setShowInfoModal] = useState(false);
 
   // Load history from localStorage if present
   useEffect(() => {
@@ -137,6 +142,30 @@ export default function App() {
     }
   };
 
+  const handleShareSite = async () => {
+    const url = window.location.href;
+    const title = 'Voice Studio - Text to Speech';
+    const shareText = 'Convert Sinhala and multilingual text into natural, expressive speech.';
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, text: shareText, url });
+        return;
+      } catch {
+        // Fall back to clipboard if dismissed or unsupported
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareToast('Site URL copied to clipboard!');
+      setTimeout(() => setShareToast(null), 2500);
+    } catch {
+      setShareToast('URL: ' + url);
+      setTimeout(() => setShareToast(null), 4000);
+    }
+  };
+
   // Keyboard shortcut Ctrl+Enter / Cmd+Enter to generate
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
@@ -151,227 +180,325 @@ export default function App() {
   const wordCount = inputText.trim() ? inputText.trim().split(/\s+/).length : 0;
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col">
-      {/* Top Header */}
-      <header className="border-b border-neutral-800/80 bg-neutral-900/60 backdrop-blur-md sticky top-0 z-30">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col relative font-sans selection:bg-amber-500/30 selection:text-amber-200">
+      {/* Notification Toast */}
+      {shareToast && (
+        <div className="fixed top-5 right-5 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-amber-500 text-zinc-950 font-semibold text-xs shadow-2xl animate-fade-in border border-amber-400">
+          <Check className="w-4 h-4 stroke-[2.5]" />
+          <span>{shareToast}</span>
+        </div>
+      )}
+
+      {/* Top Studio Header */}
+      <header className="border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-neutral-950 shadow-md shadow-amber-500/20">
-              <Volume2 className="w-5 h-5 stroke-[2.5]" />
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-zinc-950 shadow-md shadow-amber-500/20 flex-shrink-0">
+              <Volume2 className="w-4.5 h-4.5 stroke-[2.5]" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-base sm:text-lg font-bold tracking-tight text-white">
-                  Text to Speech Studio
+                <h1 className="text-base font-bold tracking-tight text-white">
+                  Voice Studio
                 </h1>
-                <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                  gemini-3.1-flash-tts-preview
+                <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-mono bg-zinc-900 text-zinc-400 border border-zinc-800">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  Neural Engine Active
                 </span>
               </div>
-              <p className="text-xs text-neutral-400">
-                Natural Sinhala & Multilingual Voice Synthesis
+              <p className="text-xs text-zinc-400">
+                Natural Sinhala & Multilingual Neural Voice Synthesis
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-neutral-400">
-            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-neutral-900 border border-neutral-800 text-neutral-300">
-              <Languages className="w-3.5 h-3.5 text-amber-500" />
-              <span>Sinhala / English</span>
+          <div className="flex items-center gap-2">
+            <span className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono bg-zinc-900 text-zinc-400 border border-zinc-800/80">
+              <span className="text-amber-500">●</span> 24 kHz WAV
             </span>
+
+            <button
+              id="info-modal-btn"
+              type="button"
+              onClick={() => setShowInfoModal(true)}
+              className="p-2 rounded-lg bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors"
+              title="System & Audio Specifications"
+            >
+              <Info className="w-4 h-4" />
+            </button>
+
+            <button
+              id="share-site-btn"
+              type="button"
+              onClick={handleShareSite}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 hover:text-amber-200 border border-amber-500/30 transition-all text-xs font-semibold"
+              title="Share site link"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Share Studio</span>
+            </button>
           </div>
         </div>
       </header>
 
-      {/* Main Container */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-        {/* Preset Pills */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs text-neutral-400">
-            <span className="flex items-center gap-1.5 font-medium">
-              <FileText className="w-3.5 h-3.5 text-amber-500" />
-              Quick Sample Texts:
-            </span>
-            <span className="text-[11px] text-neutral-500">Click to load text & voice</span>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {PRESET_TEXTS.map((preset) => {
-              const isActive = inputText === preset.text;
-              return (
-                <button
-                  key={preset.id}
-                  id={`preset-${preset.id}`}
-                  onClick={() => applyPreset(preset)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all flex items-center gap-1.5 ${
-                    isActive
-                      ? 'bg-amber-500/20 border-amber-500 text-amber-200'
-                      : 'bg-neutral-900/80 hover:bg-neutral-800 border-neutral-800 text-neutral-300 hover:text-white'
-                  }`}
-                >
-                  <span className="text-[10px] opacity-75 font-mono">[{preset.languageBadge}]</span>
-                  <span>{preset.title}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Text Input Section */}
-        <div className="bg-neutral-900/90 border border-neutral-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
-          <div className="flex items-center justify-between">
-            <label
-              htmlFor="tts-text-input"
-              className="text-xs font-semibold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5"
-            >
-              <Languages className="w-3.5 h-3.5 text-amber-500" />
-              Text to Speak (සිංහල හෝ වෙනත් භාෂාවක්)
-            </label>
-
-            <div className="flex items-center gap-2">
+      {/* Info / Specifications Modal */}
+      {showInfoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl relative">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Volume2 className="w-5 h-5 text-amber-500" />
+                <h3 className="text-base font-bold text-white">System Architecture & Specifications</h3>
+              </div>
               <button
-                id="copy-text-btn"
-                type="button"
-                onClick={copyInputText}
-                className="flex items-center gap-1 text-xs text-neutral-400 hover:text-neutral-200 transition-colors px-2 py-1 rounded hover:bg-neutral-800"
-                title="Copy text to clipboard"
+                onClick={() => setShowInfoModal(false)}
+                className="text-xs text-zinc-400 hover:text-white px-2 py-1 rounded bg-zinc-800"
               >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copied ? 'Copied' : 'Copy'}</span>
+                Close
               </button>
+            </div>
 
+            <div className="space-y-3 text-xs text-zinc-300 leading-relaxed">
+              <p>
+                Synthesizes natural speech using high-fidelity neural voice synthesis models with native phonetic articulation.
+              </p>
+
+              <div className="p-3.5 bg-zinc-950/80 rounded-xl border border-zinc-800/80 space-y-2 font-mono">
+                <div className="flex justify-between">
+                  <span className="text-zinc-500">Audio Pipeline:</span>
+                  <span className="text-zinc-200">24 kHz Linear PCM (RIFF WAV)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-500">Sinhala (සිංහල):</span>
+                  <span className="text-emerald-400">Native Neural Phonetics</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-500">Voice Roster:</span>
+                  <span className="text-zinc-200">Kore, Zephyr, Puck, Charon, Fenrir</span>
+                </div>
+              </div>
+
+              <p className="text-zinc-400">
+                Audio is rendered server-side and streamed in standard uncompressed WAV container for immediate playback across all modern browsers and mobile devices.
+              </p>
+            </div>
+
+            <div className="pt-2 flex justify-end">
               <button
-                id="reset-text-btn"
-                type="button"
-                onClick={() => setInputText(INITIAL_SINHALA_TEXT)}
-                className="flex items-center gap-1 text-xs text-neutral-400 hover:text-neutral-200 transition-colors px-2 py-1 rounded hover:bg-neutral-800"
-                title="Reset to default text"
+                onClick={() => setShowInfoModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-zinc-950 transition-colors"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Reset</span>
+                Close
               </button>
             </div>
           </div>
-
-          <div className="relative">
-            <textarea
-              id="tts-text-input"
-              rows={4}
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="කරුණාකර මෙහි ඔබගේ පෙළ ඇතුළත් කරන්න... (Type or paste any text to synthesize)"
-              className="w-full bg-neutral-950/80 border border-neutral-800 rounded-xl p-4 text-base sm:text-lg text-neutral-100 placeholder-neutral-600 focus:outline-none focus:border-amber-500/70 focus:ring-1 focus:ring-amber-500/50 transition-all leading-relaxed resize-y"
-              style={{ minHeight: '120px' }}
-            />
-          </div>
-
-          <div className="flex items-center justify-between text-xs text-neutral-500 font-mono">
-            <span>
-              {charCount} characters • {wordCount} words
-            </span>
-            <span className="text-[11px] text-neutral-500">
-              Tip: Press <kbd className="px-1 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-neutral-300">Ctrl+Enter</kbd> to generate
-            </span>
-          </div>
         </div>
+      )}
 
-        {/* Voice & Style Settings Card */}
-        <div className="bg-neutral-900/70 border border-neutral-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-5">
-          {/* Voice Selector */}
-          <VoiceSelector
-            selectedVoice={selectedVoice}
-            onSelectVoice={setSelectedVoice}
-            disabled={isLoading}
-          />
+      {/* Main Studio Area */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Left Column: Text Input & Active Player Deck (7 cols) */}
+          <div className="lg:col-span-7 space-y-5">
+            {/* Presets Bar */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs text-zinc-400">
+                <span className="flex items-center gap-1.5 font-medium text-zinc-300">
+                  <FileText className="w-3.5 h-3.5 text-amber-500" />
+                  Preset Phrases
+                </span>
+                <span className="text-[11px] text-zinc-500">Click to autofill sample</span>
+              </div>
 
-          <hr className="border-neutral-800/80" />
-
-          {/* Delivery Style Selector */}
-          <ToneSelector
-            selectedStyle={selectedStyle}
-            onSelectStyle={setSelectedStyle}
-            disabled={isLoading}
-          />
-        </div>
-
-        {/* Error Notification */}
-        {errorMsg && (
-          <div className="flex items-start gap-3 p-4 rounded-xl bg-red-950/40 border border-red-800/60 text-red-200 text-sm">
-            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="font-medium">Speech Generation Failed</p>
-              <p className="text-xs text-red-300 mt-0.5 leading-relaxed">{errorMsg}</p>
+              <div className="flex flex-wrap gap-2">
+                {PRESET_TEXTS.map((preset) => {
+                  const isActive = inputText === preset.text;
+                  return (
+                    <button
+                      key={preset.id}
+                      id={`preset-${preset.id}`}
+                      onClick={() => applyPreset(preset)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all flex items-center gap-1.5 ${
+                        isActive
+                          ? 'bg-amber-500/15 border-amber-500/60 text-amber-200 ring-1 ring-amber-500/20'
+                          : 'bg-zinc-900/60 hover:bg-zinc-850 border-zinc-800 text-zinc-300 hover:text-white'
+                      }`}
+                    >
+                      <span className="text-[10px] opacity-75 font-mono">[{preset.languageBadge}]</span>
+                      <span>{preset.title}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        )}
 
-        {/* Action Button */}
-        <div className="flex flex-col sm:flex-row items-center gap-3">
-          <button
-            id="generate-tts-btn"
-            type="button"
-            disabled={isLoading || !inputText.trim()}
-            onClick={handleGenerateTTS}
-            className="w-full sm:flex-1 flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl text-base font-semibold bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 active:scale-[0.99] text-neutral-950 shadow-lg shadow-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all"
-          >
-            {isLoading ? (
-              <>
-                <RefreshCw className="w-5 h-5 animate-spin" />
-                <span>Synthesizing Voice with Gemini 3.1 TTS...</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-5 h-5 fill-current" />
-                <span>Convert Text to Speech</span>
-              </>
+            {/* Editor Console */}
+            <div className="bg-zinc-900/50 border border-zinc-800/90 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Languages className="w-3.5 h-3.5 text-amber-500" />
+                  <span className="text-xs font-semibold text-zinc-200">
+                    Input Text (සිංහල / English / Multilingual)
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    id="copy-text-btn"
+                    type="button"
+                    onClick={copyInputText}
+                    className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200 transition-colors px-2.5 py-1 rounded-lg hover:bg-zinc-800"
+                    title="Copy text to clipboard"
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copied ? 'Copied' : 'Copy'}</span>
+                  </button>
+
+                  <button
+                    id="reset-text-btn"
+                    type="button"
+                    onClick={() => setInputText(INITIAL_SINHALA_TEXT)}
+                    className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200 transition-colors px-2.5 py-1 rounded-lg hover:bg-zinc-800"
+                    title="Reset to default text"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Reset</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="relative">
+                <textarea
+                  id="tts-text-input"
+                  rows={5}
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="කරුණාකර මෙහි ඔබගේ පෙළ ඇතුළත් කරන්න... (Type or paste text to synthesize)"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-4 text-base sm:text-lg text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-500/70 focus:ring-1 focus:ring-amber-500/30 transition-all leading-relaxed resize-y font-normal"
+                  style={{ minHeight: '140px' }}
+                />
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-zinc-500 font-mono pt-0.5">
+                <span>
+                  {charCount} chars • {wordCount} words
+                </span>
+                <span className="hidden sm:inline text-[11px] text-zinc-500">
+                  <kbd className="px-1 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-300">Ctrl+Enter</kbd> to generate
+                </span>
+              </div>
+            </div>
+
+            {/* Error Notification */}
+            {errorMsg && (
+              <div className="flex items-start gap-3 p-4 rounded-xl bg-red-950/40 border border-red-800/60 text-red-200 text-sm">
+                <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-semibold text-xs text-red-300">Synthesis Failed</p>
+                  <p className="text-xs text-red-400/90 mt-0.5 leading-relaxed">{errorMsg}</p>
+                </div>
+              </div>
             )}
-          </button>
-        </div>
 
-        {/* Active Audio Player */}
-        {currentAudioUrl && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-xs font-semibold text-neutral-300 uppercase tracking-wider">
-              <Headphones className="w-4 h-4 text-amber-500" />
-              <span>Current Audio Playback</span>
+            {/* Primary Action Button */}
+            <div>
+              <button
+                id="generate-tts-btn"
+                type="button"
+                disabled={isLoading || !inputText.trim()}
+                onClick={handleGenerateTTS}
+                className="w-full flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl text-sm sm:text-base font-semibold bg-amber-500 hover:bg-amber-400 active:scale-[0.99] text-zinc-950 shadow-lg shadow-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all cursor-pointer"
+              >
+                {isLoading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
+                    <span>Synthesizing Voice...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
+                    <span>Generate Speech</span>
+                  </>
+                )}
+              </button>
             </div>
 
-            <AudioPlayer
-              audioUrl={currentAudioUrl}
-              voice={currentClip?.voice || selectedVoice}
-              style={currentClip?.style || selectedStyle}
-              estimatedDuration={currentClip?.duration || 4}
-              textSnippet={currentClip?.text || inputText}
+            {/* Active Audio Player Deck */}
+            {currentAudioUrl ? (
+              <div className="space-y-2 pt-2">
+                <div className="flex items-center gap-2 text-xs font-semibold text-zinc-300">
+                  <Headphones className="w-4 h-4 text-amber-500" />
+                  <span>Audio Output Player</span>
+                </div>
+
+                <AudioPlayer
+                  audioUrl={currentAudioUrl}
+                  voice={currentClip?.voice || selectedVoice}
+                  style={currentClip?.style || selectedStyle}
+                  estimatedDuration={currentClip?.duration || 4}
+                  textSnippet={currentClip?.text || inputText}
+                />
+              </div>
+            ) : (
+              <div className="p-6 rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/40 text-center space-y-2">
+                <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center mx-auto text-zinc-500">
+                  <Headphones className="w-5 h-5" />
+                </div>
+                <p className="text-xs font-medium text-zinc-400">Ready for Voice Synthesis</p>
+                <p className="text-[11px] text-zinc-500">Select a voice persona and click "Generate Speech" to listen</p>
+              </div>
+            )}
+          </div>
+
+          {/* Right Column: Voice Persona, Delivery Style & Session History (5 cols) */}
+          <div className="lg:col-span-5 space-y-5">
+            {/* Voice & Delivery Controls */}
+            <div className="bg-zinc-900/50 border border-zinc-800/90 rounded-2xl p-4 sm:p-5 shadow-sm space-y-5">
+              <VoiceSelector
+                selectedVoice={selectedVoice}
+                onSelectVoice={setSelectedVoice}
+                disabled={isLoading}
+              />
+
+              <hr className="border-zinc-800/80" />
+
+              <ToneSelector
+                selectedStyle={selectedStyle}
+                onSelectStyle={setSelectedStyle}
+                disabled={isLoading}
+              />
+            </div>
+
+            {/* Session Clip History */}
+            <ClipHistory
+              clips={history}
+              currentClipId={currentClip?.id}
+              onSelectClip={(clip) => {
+                setCurrentAudioUrl(clip.audioUrl);
+                setCurrentClip(clip);
+                setInputText(clip.text);
+                setSelectedVoice(clip.voice);
+                setSelectedStyle(clip.style);
+              }}
+              onClearHistory={clearHistory}
             />
           </div>
-        )}
-
-        {/* Clip History */}
-        <ClipHistory
-          clips={history}
-          currentClipId={currentClip?.id}
-          onSelectClip={(clip) => {
-            setCurrentAudioUrl(clip.audioUrl);
-            setCurrentClip(clip);
-            setInputText(clip.text);
-            setSelectedVoice(clip.voice);
-            setSelectedStyle(clip.style);
-          }}
-          onClearHistory={clearHistory}
-        />
+        </div>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-neutral-800/60 bg-neutral-950/60 py-5 mt-auto">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-neutral-500">
-          <p>
-            Powered by Google AI Studio & <code className="text-neutral-400 font-mono">gemini-3.1-flash-tts-preview</code>
+      {/* Modern Studio Footer */}
+      <footer className="border-t border-zinc-800/60 bg-zinc-950/80 py-4 mt-auto">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-500">
+          <p className="flex flex-wrap items-center gap-1.5">
+            <span>Developed by <span className="font-semibold text-zinc-200">Samithu Dinil</span></span>
+            <span className="text-zinc-600 hidden sm:inline">•</span>
+            <span>Neural Speech Synthesis Studio</span>
           </p>
-          <div className="flex items-center gap-4 text-neutral-400">
-            <span>24 kHz Uncompressed Audio</span>
+          <div className="flex items-center gap-4 text-zinc-400 font-mono text-[11px]">
+            <span>24 kHz Uncompressed WAV</span>
             <span>•</span>
-            <span>Sinhala & Multilingual</span>
+            <span>Sinhala & Multilingual Engine</span>
           </div>
         </div>
       </footer>

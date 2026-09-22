@@ -9,63 +9,74 @@ interface AudioVisualizerProps {
 export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
   isPlaying,
   progress,
-  barCount = 36,
+  barCount = 44,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
+    // Retina display scaling
+    const dpr = window.devicePixelRatio || 1;
+    const updateDimensions = () => {
+      const rect = container.getBoundingClientRect();
+      canvas.width = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
+      ctx.scale(dpr, dpr);
+    };
+
+    updateDimensions();
 
     let phase = 0;
 
     const render = () => {
-      const width = canvas.width;
-      const height = canvas.height;
+      const rect = container.getBoundingClientRect();
+      const width = rect.width;
+      const height = rect.height;
       ctx.clearRect(0, 0, width, height);
 
-      const barWidth = Math.max(2, (width / barCount) - 3);
+      const spacing = 2.5;
+      const totalSpacing = (barCount - 1) * spacing;
+      const barWidth = Math.max(2, (width - totalSpacing) / barCount);
       const centerY = height / 2;
 
       for (let i = 0; i < barCount; i++) {
-        const x = i * (barWidth + 3);
+        const x = i * (barWidth + spacing);
         const normX = i / barCount;
         const isPast = normX <= progress;
 
-        // Dynamic wave calculation
         let barHeight = 6;
         if (isPlaying) {
-          const wave1 = Math.sin(i * 0.35 + phase * 2.5);
-          const wave2 = Math.cos(i * 0.2 - phase * 1.8);
-          const variance = Math.abs(wave1 * 0.6 + wave2 * 0.4);
-          barHeight = 8 + variance * (height * 0.7);
+          const wave1 = Math.sin(i * 0.35 + phase * 2.8);
+          const wave2 = Math.cos(i * 0.18 - phase * 1.5);
+          const variance = Math.abs(wave1 * 0.65 + wave2 * 0.35);
+          barHeight = 6 + variance * (height * 0.72);
         } else if (isPast) {
-          // Semi-active static bar
-          const staticWave = Math.sin(i * 0.4);
-          barHeight = 10 + Math.abs(staticWave) * 16;
+          const staticWave = Math.sin(i * 0.32);
+          barHeight = 8 + Math.abs(staticWave) * 14;
         } else {
-          // Idle bar
-          const staticWave = Math.sin(i * 0.3);
-          barHeight = 6 + Math.abs(staticWave) * 8;
+          const staticWave = Math.sin(i * 0.28);
+          barHeight = 5 + Math.abs(staticWave) * 8;
         }
 
-        // Color based on playback progress
         if (isPast) {
           const gradient = ctx.createLinearGradient(0, centerY - barHeight / 2, 0, centerY + barHeight / 2);
           gradient.addColorStop(0, '#fbbf24'); // amber-400
           gradient.addColorStop(1, '#f59e0b'); // amber-500
           ctx.fillStyle = gradient;
         } else {
-          ctx.fillStyle = '#404040'; // neutral-700
+          ctx.fillStyle = '#27272a'; // zinc-800
         }
 
         const y = centerY - barHeight / 2;
         const radius = barWidth / 2;
 
-        // Draw rounded pill bar
         ctx.beginPath();
         if (typeof ctx.roundRect === 'function') {
           ctx.roundRect(x, y, barWidth, barHeight, [radius]);
@@ -76,14 +87,20 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
       }
 
       if (isPlaying) {
-        phase += 0.04;
+        phase += 0.035;
       }
       animationFrameRef.current = requestAnimationFrame(render);
     };
 
     render();
 
+    const handleResize = () => {
+      updateDimensions();
+    };
+    window.addEventListener('resize', handleResize);
+
     return () => {
+      window.removeEventListener('resize', handleResize);
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
@@ -91,13 +108,15 @@ export const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
   }, [isPlaying, progress, barCount]);
 
   return (
-    <div className="w-full h-16 flex items-center justify-center bg-neutral-950/60 rounded-xl px-4 py-2 border border-neutral-800/80 backdrop-blur-sm overflow-hidden">
+    <div
+      ref={containerRef}
+      className="w-full h-14 flex items-center justify-center bg-zinc-950/90 rounded-xl px-3 py-1 border border-zinc-800/80 overflow-hidden"
+    >
       <canvas
         ref={canvasRef}
-        width={420}
-        height={56}
-        className="w-full h-full"
+        className="w-full h-full block"
       />
     </div>
   );
 };
+

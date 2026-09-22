@@ -33,12 +33,17 @@ export const ToneSelector: React.FC<ToneSelectorProps> = ({
 
   return (
     <div className="space-y-2.5">
-      <label className="text-xs font-semibold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
-        <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-        Delivery Tone & Style
-      </label>
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-semibold tracking-wide text-zinc-300 flex items-center gap-1.5">
+          <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+          Pacing & Tone
+        </label>
+        <span className="text-[11px] text-zinc-500 font-mono capitalize">
+          {selectedStyle}
+        </span>
+      </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
         {DELIVERY_STYLES.map((style) => {
           const isSelected = selectedStyle === style.id;
 
@@ -49,17 +54,17 @@ export const ToneSelector: React.FC<ToneSelectorProps> = ({
               type="button"
               disabled={disabled}
               onClick={() => onSelectStyle(style.id)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border transition-all ${
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border transition-all text-left ${
                 isSelected
-                  ? 'bg-amber-500/15 border-amber-500/60 text-amber-300 shadow-sm shadow-amber-500/10'
-                  : 'bg-neutral-900/80 hover:bg-neutral-850 border-neutral-800 text-neutral-300 hover:text-white'
+                  ? 'bg-amber-500/15 border-amber-500/50 text-amber-300 ring-1 ring-amber-500/20 shadow-sm'
+                  : 'bg-zinc-900/40 hover:bg-zinc-900/80 border-zinc-800/80 text-zinc-300 hover:text-zinc-100'
               } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
               title={style.description}
             >
-              <span className={isSelected ? 'text-amber-400' : 'text-neutral-400'}>
+              <span className={isSelected ? 'text-amber-400' : 'text-zinc-500'}>
                 {getIcon(style.iconName)}
               </span>
-              <span>{style.label}</span>
+              <span className="truncate">{style.label}</span>
             </button>
           );
         })}
@@ -67,3 +72,4 @@ export const ToneSelector: React.FC<ToneSelectorProps> = ({
     </div>
   );
 };
+

@@ -1,5 +1,5 @@
 import React from 'react';
-import { History, Play, Download, Trash2, Clock } from 'lucide-react';
+import { History, Play, Download, Trash2, Clock, Volume2 } from 'lucide-react';
 import { GeneratedClip } from '../types';
 
 interface ClipHistoryProps {
@@ -29,12 +29,12 @@ export const ClipHistory: React.FC<ClipHistoryProps> = ({
   };
 
   return (
-    <div id="clip-history-section" className="bg-neutral-900/90 border border-neutral-800 rounded-2xl p-4 sm:p-5 space-y-3">
+    <div id="clip-history-section" className="bg-zinc-900/60 border border-zinc-800/90 rounded-2xl p-4 sm:p-5 space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <History className="w-4 h-4 text-amber-500" />
-          <h3 className="text-sm font-semibold text-neutral-200">Generated Clips History</h3>
-          <span className="px-2 py-0.5 rounded-full text-[11px] font-mono bg-neutral-800 text-neutral-400">
+          <History className="w-3.5 h-3.5 text-amber-500" />
+          <h3 className="text-xs font-semibold tracking-wide text-zinc-300">Session History</h3>
+          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-zinc-800 text-zinc-400 border border-zinc-700/60">
             {clips.length}
           </span>
         </div>
@@ -42,65 +42,65 @@ export const ClipHistory: React.FC<ClipHistoryProps> = ({
         <button
           id="clear-history-btn"
           onClick={onClearHistory}
-          className="flex items-center gap-1 text-xs text-neutral-500 hover:text-red-400 transition-colors"
+          className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-red-400 transition-colors"
           title="Clear all clips"
         >
-          <Trash2 className="w-3.5 h-3.5" />
+          <Trash2 className="w-3 h-3" />
           <span>Clear</span>
         </button>
       </div>
 
-      <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+      <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
         {clips.map((clip) => {
           const isActive = currentClipId === clip.id;
 
           return (
             <div
               key={clip.id}
-              className={`flex items-center justify-between gap-3 p-3 rounded-xl border transition-all ${
+              className={`flex items-center justify-between gap-3 p-2.5 rounded-xl border transition-all ${
                 isActive
-                  ? 'bg-amber-500/10 border-amber-500/40 text-amber-100'
-                  : 'bg-neutral-950/60 border-neutral-800/80 hover:border-neutral-700 text-neutral-300'
+                  ? 'bg-zinc-850 border-amber-500/60 text-zinc-100 ring-1 ring-amber-500/20 shadow-sm'
+                  : 'bg-zinc-950/50 border-zinc-850 hover:border-zinc-700/80 text-zinc-300'
               }`}
             >
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium text-neutral-200 truncate">
+                <p className="text-xs font-medium text-zinc-200 truncate">
                   "{clip.text}"
                 </p>
-                <div className="flex items-center gap-2 mt-1 text-[11px] text-neutral-400">
-                  <span className="text-amber-400 font-medium">Voice: {clip.voice}</span>
-                  <span>•</span>
+                <div className="flex items-center gap-2 mt-0.5 text-[10px] text-zinc-400 font-mono">
+                  <span className="text-amber-400 font-sans font-medium">{clip.voice}</span>
+                  <span className="text-zinc-600">•</span>
                   <span className="capitalize">{clip.style}</span>
-                  <span>•</span>
+                  <span className="text-zinc-600">•</span>
                   <span className="flex items-center gap-0.5">
-                    <Clock className="w-3 h-3" />
+                    <Clock className="w-2.5 h-2.5 text-zinc-500" />
                     {clip.duration}s
                   </span>
-                  <span>•</span>
+                  <span className="text-zinc-600">•</span>
                   <span>{formatTimeAgo(clip.createdAt)}</span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5 flex-shrink-0">
+              <div className="flex items-center gap-1 flex-shrink-0">
                 <button
                   onClick={() => onSelectClip(clip)}
-                  className={`p-2 rounded-lg transition-colors ${
+                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                     isActive
-                      ? 'bg-amber-500 text-neutral-950 hover:bg-amber-400'
-                      : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200'
+                      ? 'bg-amber-500 text-zinc-950 hover:bg-amber-400'
+                      : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white'
                   }`}
                   title="Load and play this clip"
                 >
-                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <Play className="w-3 h-3 fill-current" />
                 </button>
 
                 <a
                   href={clip.audioUrl}
                   download={`tts-${clip.voice.toLowerCase()}-${clip.id}.wav`}
-                  className="p-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 transition-colors"
+                  className="p-1.5 rounded-lg bg-zinc-850 hover:bg-zinc-750 text-zinc-400 hover:text-zinc-200 transition-colors border border-zinc-800"
                   title="Download WAV"
                 >
-                  <Download className="w-3.5 h-3.5" />
+                  <Download className="w-3 h-3" />
                 </a>
               </div>
             </div>
@@ -110,3 +110,4 @@ export const ClipHistory: React.FC<ClipHistoryProps> = ({
     </div>
   );
 };
+

@@ -17,16 +17,16 @@ export const VoiceSelector: React.FC<VoiceSelectorProps> = ({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <label className="text-xs font-semibold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
+        <label className="text-xs font-semibold tracking-wide text-zinc-300 flex items-center gap-1.5">
           <User className="w-3.5 h-3.5 text-amber-500" />
-          Select Gemini Voice
+          Voice Persona
         </label>
-        <span className="text-xs text-neutral-400">
-          Model: <code className="text-amber-400/90 font-mono">gemini-3.1-flash-tts-preview</code>
+        <span className="text-[11px] text-zinc-500 font-mono">
+          5 Natural Voices
         </span>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+      <div className="grid grid-cols-1 gap-2">
         {GEMINI_VOICES.map((voice) => {
           const isSelected = selectedVoice === voice.id;
 
@@ -37,46 +37,47 @@ export const VoiceSelector: React.FC<VoiceSelectorProps> = ({
               type="button"
               disabled={disabled}
               onClick={() => onSelectVoice(voice.id)}
-              className={`relative flex flex-col p-3 rounded-xl text-left border transition-all ${
+              className={`group relative flex items-start justify-between p-3 rounded-xl text-left border transition-all duration-150 ${
                 isSelected
-                  ? 'bg-amber-500/10 border-amber-500/50 shadow-sm shadow-amber-500/10'
-                  : 'bg-neutral-900/70 hover:bg-neutral-800/80 border-neutral-800 hover:border-neutral-700'
+                  ? 'bg-zinc-900 border-amber-500/70 text-zinc-100 ring-1 ring-amber-500/30 shadow-sm'
+                  : 'bg-zinc-900/40 hover:bg-zinc-900/80 border-zinc-800/80 hover:border-zinc-700 text-zinc-300'
               } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
             >
-              <div className="flex items-center justify-between w-full mb-1">
-                <div className="flex items-center gap-2">
-                  <span className={`text-sm font-semibold ${isSelected ? 'text-amber-300' : 'text-neutral-200'}`}>
+              <div className="min-w-0 flex-1 pr-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`text-sm font-semibold tracking-tight ${isSelected ? 'text-amber-400' : 'text-zinc-200'}`}>
                     {voice.name}
                   </span>
-                  <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700">
+                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/60">
                     {voice.gender}
                   </span>
+                  {voice.id === 'Kore' && (
+                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                      Sinhala Recommended
+                    </span>
+                  )}
                 </div>
 
+                <p className="text-xs font-medium text-zinc-300 mb-0.5">
+                  {voice.character}
+                </p>
+
+                <p className="text-[11px] text-zinc-500 leading-relaxed line-clamp-2">
+                  {voice.description}
+                </p>
+              </div>
+
+              <div className="flex-shrink-0 pt-0.5">
                 {isSelected ? (
-                  <span className="flex items-center justify-center w-4 h-4 rounded-full bg-amber-500 text-neutral-950">
+                  <span className="flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-zinc-950 shadow-sm">
                     <Check className="w-3 h-3 stroke-[3]" />
                   </span>
                 ) : (
-                  <Volume2 className="w-3.5 h-3.5 text-neutral-500 opacity-60" />
+                  <span className="flex items-center justify-center w-5 h-5 rounded-full border border-zinc-800 text-zinc-600 group-hover:text-zinc-400 transition-colors">
+                    <Volume2 className="w-3 h-3" />
+                  </span>
                 )}
               </div>
-
-              <span className="text-xs font-medium text-neutral-300 mb-0.5">
-                {voice.character}
-              </span>
-
-              <p className="text-[11px] text-neutral-400 line-clamp-2 leading-relaxed">
-                {voice.description}
-              </p>
-
-              {voice.toneTag && (
-                <div className="mt-2 pt-1.5 border-t border-neutral-800/60 flex items-center">
-                  <span className="text-[10px] text-amber-400/90 font-medium">
-                    {voice.toneTag}
-                  </span>
-                </div>
-              )}
             </button>
           );
         })}
@@ -84,3 +85,4 @@ export const VoiceSelector: React.FC<VoiceSelectorProps> = ({
     </div>
   );
 };
+
