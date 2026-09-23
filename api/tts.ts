@@ -4,9 +4,9 @@ import { GoogleGenAI, Modality } from '@google/genai';
 let aiClient: GoogleGenAI | null = null;
 function getGenAI(): GoogleGenAI {
   if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
     if (!apiKey) {
-      throw new Error('GEMINI_API_KEY environment variable is required.');
+      throw new Error('GEMINI_API_KEY or API_KEY environment variable is required.');
     }
     aiClient = new GoogleGenAI({
       apiKey,
