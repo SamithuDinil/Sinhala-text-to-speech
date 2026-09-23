@@ -1,12 +1,18 @@
-export type VoiceName = 'Kore' | 'Zephyr' | 'Puck' | 'Charon' | 'Fenrir';
+export type VoiceName = string;
 
 export interface VoiceOption {
-  id: VoiceName;
+  id: string;
   name: string;
   gender: 'Female' | 'Male' | 'Neutral';
   character: string;
   description: string;
   toneTag: string;
+  isCustom?: boolean;
+  baseVoice?: string;
+  accent?: string;
+  creator?: string;
+  likes?: number;
+  promptInstructions?: string;
 }
 
 export type DeliveryStyle = 'natural' | 'storytelling' | 'cheerful' | 'calm' | 'documentary';
@@ -21,11 +27,25 @@ export interface DeliveryStyleOption {
 export interface GeneratedClip {
   id: string;
   text: string;
-  voice: VoiceName;
+  voice: string;
   style: DeliveryStyle;
   audioUrl: string;
   duration: number;
   byteSize: number;
+  createdAt: number;
+  isFavorite?: boolean;
+}
+
+export interface VoiceProject {
+  id: string;
+  title: string;
+  paragraphs: {
+    id: string;
+    text: string;
+    voice: string;
+    style: DeliveryStyle;
+  }[];
+  bgMusic: 'none' | 'rain' | 'lofi' | 'cinematic' | 'cafe';
   createdAt: number;
 }
 
@@ -34,9 +54,12 @@ export interface TTSApiResponse {
   audioBase64: string;
   mimeType: string;
   sampleRate: number;
-  voice: VoiceName;
+  voice: string;
   style: DeliveryStyle;
   duration: number;
   byteSize: number;
   error?: string;
+  isRateLimit?: boolean;
+  retryAfter?: number;
+  modelUsed?: string;
 }

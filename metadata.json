@@ -1,6 +1,6 @@
 {
-  "name": "Voice Studio",
-  "description": "Convert Sinhala and multilingual text into natural, expressive speech with advanced neural voice synthesis.",
+  "name": "VoiceCraft Studio",
+  "description": "Create, develop, and share custom AI voices. Convert multilingual and Sinhala text into natural expressive speech with community voice models.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

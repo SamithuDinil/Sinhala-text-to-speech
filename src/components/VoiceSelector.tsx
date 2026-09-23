@@ -1,19 +1,23 @@
 import React from 'react';
-import { User, Volume2, Check } from 'lucide-react';
-import { VoiceName } from '../types';
+import { User, Volume2, Check, Sparkles } from 'lucide-react';
+import { VoiceName, VoiceOption } from '../types';
 import { GEMINI_VOICES } from '../data/presets';
 
 interface VoiceSelectorProps {
   selectedVoice: VoiceName;
   onSelectVoice: (voice: VoiceName) => void;
   disabled?: boolean;
+  customVoices?: VoiceOption[];
 }
 
 export const VoiceSelector: React.FC<VoiceSelectorProps> = ({
   selectedVoice,
   onSelectVoice,
   disabled = false,
+  customVoices = [],
 }) => {
+  const allVoices = [...GEMINI_VOICES, ...customVoices];
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -22,18 +26,18 @@ export const VoiceSelector: React.FC<VoiceSelectorProps> = ({
           Voice Persona
         </label>
         <span className="text-[11px] text-zinc-500 font-mono">
-          5 Natural Voices
+          {allVoices.length} Voices Available
         </span>
       </div>
 
-      <div className="grid grid-cols-1 gap-2">
-        {GEMINI_VOICES.map((voice) => {
+      <div className="grid grid-cols-1 gap-2 max-h-[380px] overflow-y-auto pr-1">
+        {allVoices.map((voice) => {
           const isSelected = selectedVoice === voice.id;
 
           return (
             <button
               key={voice.id}
-              id={`voice-btn-${voice.id.toLowerCase()}`}
+              id={`voice-btn-${voice.id}`}
               type="button"
               disabled={disabled}
               onClick={() => onSelectVoice(voice.id)}
@@ -51,7 +55,12 @@ export const VoiceSelector: React.FC<VoiceSelectorProps> = ({
                   <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/60">
                     {voice.gender}
                   </span>
-                  {voice.id === 'Kore' && (
+                  {voice.isCustom && (
+                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20 flex items-center gap-1">
+                      <Sparkles className="w-2.5 h-2.5" /> Custom
+                    </span>
+                  )}
+                  {voice.id === 'Kore' && !voice.isCustom && (
                     <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
                       Sinhala Recommended
                     </span>
@@ -85,4 +94,3 @@ export const VoiceSelector: React.FC<VoiceSelectorProps> = ({
     </div>
   );
 };
-

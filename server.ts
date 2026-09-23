@@ -57,9 +57,87 @@ function pcmToWav(pcmBuffer: Buffer, sampleRate = 24000, channels = 1, bitDepth 
   return Buffer.concat([header, pcmBuffer]);
 }
 
+// In-memory cache for synthesized audio to prevent duplicate API calls and conserve quota
+interface CacheEntry {
+  audioBase64: string;
+  duration: number;
+  byteSize: number;
+}
+const audioCache = new Map<string, CacheEntry>();
+
+function getCacheKey(text: string, voice: string, style: string): string {
+  return `${voice}::${style}::${text.trim()}`;
+}
+
+function parseGeminiError(error: any): { isRateLimit: boolean; message: string; retryAfter?: number } {
+  let statusCode = 500;
+  let parsedErrorObj: any = null;
+  const rawMsg = String(error?.message || "");
+
+  try {
+    const jsonMatch = rawMsg.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      parsedErrorObj = JSON.parse(jsonMatch[0]);
+    } else if (typeof error === "object" && error !== null) {
+      parsedErrorObj = error;
+    }
+  } catch {
+    // fallback
+  }
+
+  const errData = parsedErrorObj?.error || parsedErrorObj;
+  if (errData?.code) {
+    statusCode = Number(errData.code);
+  }
+  if (errData?.status === "RESOURCE_EXHAUSTED" || error?.status === 429) {
+    statusCode = 429;
+  }
+
+  const isRateLimit =
+    statusCode === 429 ||
+    errData?.status === "RESOURCE_EXHAUSTED" ||
+    rawMsg.includes("429") ||
+    rawMsg.toLowerCase().includes("quota exceeded") ||
+    rawMsg.toLowerCase().includes("resource_exhausted");
+
+  let retryAfter = 60;
+  if (Array.isArray(errData?.details)) {
+    const retryInfo = errData.details.find((d: any) => d?.["@type"]?.includes("RetryInfo"));
+    if (retryInfo?.retryDelay) {
+      const match = String(retryInfo.retryDelay).match(/([0-9]+)/);
+      if (match) retryAfter = parseInt(match[1], 10);
+    }
+  } else {
+    const textMatch = rawMsg.match(/retry in\s+([0-9.]+)\s*s/i);
+    if (textMatch) {
+      retryAfter = Math.ceil(parseFloat(textMatch[1]));
+    }
+  }
+
+  if (isRateLimit) {
+    return {
+      isRateLimit: true,
+      message: `Speech synthesis quota temporarily exceeded. Please wait ${retryAfter} seconds before trying again, or upgrade your API quota in Google AI Studio.`,
+      retryAfter,
+    };
+  }
+
+  const friendlyMsg = errData?.message || rawMsg || "Failed to generate speech. Please try again.";
+  return {
+    isRateLimit: false,
+    message: friendlyMsg.split("\n")[0].substring(0, 200),
+  };
+}
+
+const TTS_MODELS = [
+  "gemini-2.5-flash-preview-tts",
+  "gemini-3.1-flash-tts-preview",
+  "gemini-2.5-pro-preview-tts",
+];
+
 // Health check endpoint
 app.get("/api/health", (_req: Request, res: Response) => {
-  res.json({ status: "ok", model: "gemini-3.1-flash-tts-preview" });
+  res.json({ status: "ok", models: TTS_MODELS });
 });
 
 // Text-to-Speech generation endpoint
@@ -72,12 +150,29 @@ app.post("/api/tts", async (req: Request, res: Response) => {
       return;
     }
 
-    const ai = getGenAI();
-
-    // Available prebuilt voices for gemini-3.1-flash-tts-preview:
-    // 'Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr'
+    // Available prebuilt voices: 'Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr'
     const allowedVoices = ["Puck", "Charon", "Kore", "Fenrir", "Zephyr"];
     const selectedVoice = allowedVoices.includes(voice) ? voice : "Kore";
+
+    // Check memory cache first
+    const cacheKey = getCacheKey(text, selectedVoice, style);
+    const cached = audioCache.get(cacheKey);
+    if (cached) {
+      res.json({
+        success: true,
+        audioBase64: cached.audioBase64,
+        mimeType: "audio/wav",
+        sampleRate: 24000,
+        voice: selectedVoice,
+        style,
+        duration: cached.duration,
+        byteSize: cached.byteSize,
+        cached: true,
+      });
+      return;
+    }
+
+    const ai = getGenAI();
 
     // Format prompt text with optional tone guidance for expressiveness
     let promptContent = text.trim();
@@ -91,33 +186,65 @@ app.post("/api/tts", async (req: Request, res: Response) => {
       promptContent = `Read in an articulate, dignified, and captivating documentary tone: ${promptContent}`;
     }
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.1-flash-tts-preview",
-      contents: [{ parts: [{ text: promptContent }] }],
-      config: {
-        responseModalities: [Modality.AUDIO],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: selectedVoice },
-          },
-        },
-      },
-    });
+    let lastError: any = null;
+    let audioData: string | null = null;
+    let successfulModel: string | null = null;
 
-    const inlineData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData;
-    if (!inlineData?.data) {
+    // Attempt generation across available TTS models with automatic fallback
+    for (const modelName of TTS_MODELS) {
+      try {
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: [{ parts: [{ text: promptContent }] }],
+          config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: selectedVoice },
+              },
+            },
+          },
+        });
+
+        const inlineData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+        if (inlineData?.data) {
+          audioData = inlineData.data;
+          successfulModel = modelName;
+          break;
+        }
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`TTS attempt with ${modelName} failed, trying fallback:`, err?.message || err);
+      }
+    }
+
+    if (!audioData) {
+      if (lastError) {
+        throw lastError;
+      }
       res.status(500).json({
-        error: "The model did not return audio data. Please try again with shorter text or a different voice.",
+        error: "The speech synthesis engine did not return audio data. Please try with shorter text or a different voice.",
       });
       return;
     }
 
-    const rawBuffer = Buffer.from(inlineData.data, "base64");
+    const rawBuffer = Buffer.from(audioData, "base64");
     const isAlreadyWav = rawBuffer.subarray(0, 4).toString("ascii") === "RIFF";
 
     const wavBuffer = isAlreadyWav ? rawBuffer : pcmToWav(rawBuffer, 24000, 1, 16);
     const wavBase64 = wavBuffer.toString("base64");
     const estimatedDuration = Math.round((rawBuffer.length / (24000 * 2)) * 10) / 10;
+
+    // Cache generated audio (max 100 entries)
+    if (audioCache.size >= 100) {
+      const oldestKey = audioCache.keys().next().value;
+      if (oldestKey) audioCache.delete(oldestKey);
+    }
+    audioCache.set(cacheKey, {
+      audioBase64: wavBase64,
+      duration: estimatedDuration,
+      byteSize: wavBuffer.length,
+    });
 
     res.json({
       success: true,
@@ -128,11 +255,15 @@ app.post("/api/tts", async (req: Request, res: Response) => {
       style,
       duration: estimatedDuration,
       byteSize: wavBuffer.length,
+      modelUsed: successfulModel,
     });
   } catch (error: any) {
     console.error("TTS generation error:", error);
-    res.status(500).json({
-      error: error?.message || "Failed to generate speech. Please check your Gemini API key and parameters.",
+    const parsed = parseGeminiError(error);
+    res.status(parsed.isRateLimit ? 429 : 500).json({
+      error: parsed.message,
+      isRateLimit: parsed.isRateLimit,
+      retryAfter: parsed.retryAfter,
     });
   }
 });
