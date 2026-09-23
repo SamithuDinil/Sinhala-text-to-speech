@@ -16,7 +16,7 @@ function getGenAI(): GoogleGenAI {
   if (!aiClient) {
     const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
     if (!apiKey) {
-      throw new Error("GEMINI_API_KEY or API_KEY environment variable is required.");
+      throw new Error("GEMINI_API_KEY is missing. Please add GEMINI_API_KEY in your Vercel Project Settings -> Environment Variables or local .env file.");
     }
     aiClient = new GoogleGenAI({
       apiKey,
@@ -137,7 +137,8 @@ const TTS_MODELS = [
 
 // Health check endpoint
 app.get("/api/health", (_req: Request, res: Response) => {
-  res.json({ status: "ok", models: TTS_MODELS });
+  const hasApiKey = Boolean(process.env.GEMINI_API_KEY || process.env.API_KEY);
+  res.json({ status: "ok", hasApiKey, models: TTS_MODELS });
 });
 
 // Text-to-Speech generation endpoint
