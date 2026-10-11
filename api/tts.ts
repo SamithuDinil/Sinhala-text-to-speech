@@ -1,23 +1,28 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI, Modality } from '@google/genai';
 
-let aiClient: GoogleGenAI | null = null;
-function getGenAI(): GoogleGenAI {
-  if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
-    if (!apiKey) {
-      throw new Error('GEMINI_API_KEY is missing. Please add GEMINI_API_KEY in your Vercel Project Settings -> Environment Variables.');
-    }
-    aiClient = new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'voicecraft-vercel',
-        },
+function getEffectiveApiKey(customKey?: string): string | null {
+  const trimmed = customKey?.trim();
+  if (trimmed) return trimmed;
+  return (
+    process.env.GEMINI_API_KEY ||
+    process.env.API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.GEMINI_KEY ||
+    process.env.VITE_GEMINI_API_KEY ||
+    null
+  );
+}
+
+function getGenAI(apiKey: string): GoogleGenAI {
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
       },
-    });
-  }
-  return aiClient;
+    },
+  });
 }
 
 function pcmToWav(pcmBuffer: Buffer, sampleRate = 24000, channels = 1, bitDepth = 16): Buffer {
@@ -45,14 +50,24 @@ function pcmToWav(pcmBuffer: Buffer, sampleRate = 24000, channels = 1, bitDepth 
 }
 
 const TTS_MODELS = [
-  'gemini-2.5-flash-preview-tts',
-  'gemini-3.1-flash-tts-preview',
+  'gemini-3.8-flash-tts',
+  'gemini-3.8-flash-lite-tts',
   'gemini-2.5-pro-preview-tts',
+  'gemini-3.1-flash-tts-preview',
+  'gemini-2.5-flash-preview-tts',
 ];
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-gemini-api-key');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+
   if (req.method !== 'POST') {
-    res.setHeader('Allow', ['POST']);
+    res.setHeader('Allow', ['POST', 'OPTIONS']);
     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
   }
 
@@ -66,7 +81,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const allowedVoices = ['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr'];
     const selectedVoice = allowedVoices.includes(voice) ? voice : 'Kore';
 
-    const ai = getGenAI();
+    const customKey = (req.headers['x-gemini-api-key'] as string) || req.body?.customApiKey;
+    const apiKey = getEffectiveApiKey(customKey);
+
+    if (!apiKey) {
+      return res.status(200).json({
+        success: false,
+        isMissingApiKey: true,
+        fallbackToBrowser: true,
+        error: 'GEMINI_API_KEY is not configured in your Vercel Project Settings -> Environment Variables. The app has switched to Unlimited Browser Voice Engine so you can speak immediately!',
+      });
+    }
+
+    const ai = getGenAI(apiKey);
 
     let promptContent = text.trim();
     if (style === 'storytelling') {
@@ -106,7 +133,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       } catch (err: any) {
         lastError = err;
-        console.warn(`TTS attempt with ${modelName} failed on Vercel function:`, err?.message || err);
       }
     }
 
@@ -133,20 +159,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       modelUsed: successfulModel,
     });
   } catch (error: any) {
-    console.error('Vercel TTS generation error:', error);
     const rawMsg = String(error?.message || '');
     const isRateLimit = rawMsg.includes('429') || rawMsg.toLowerCase().includes('quota') || rawMsg.toLowerCase().includes('resource_exhausted');
+    const isMissingApiKey = rawMsg.includes('GEMINI_API_KEY') || rawMsg.includes('API_KEY is missing') || rawMsg.includes('API key');
+    if (!isRateLimit && !isMissingApiKey) {
+      console.error('Vercel TTS generation error:', error);
+    }
     
     let retryAfter = 45;
     const match = rawMsg.match(/retry in\s+([0-9.]+)\s*s/i);
     if (match) retryAfter = Math.ceil(parseFloat(match[1]));
 
-    return res.status(isRateLimit ? 429 : 500).json({
+    return res.status(isRateLimit ? 429 : 200).json({
+      success: false,
+      isMissingApiKey,
       error: isRateLimit
         ? `Speech synthesis quota temporarily exceeded. Please wait ${retryAfter} seconds or upgrade your API quota.`
         : (error?.message || 'Failed to generate speech.'),
       isRateLimit,
       retryAfter,
+      fallbackToBrowser: true,
     });
   }
 }

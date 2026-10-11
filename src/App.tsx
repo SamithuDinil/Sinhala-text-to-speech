@@ -16,6 +16,9 @@ import {
   Wand2,
   Users,
   FolderKanban,
+  Zap,
+  Key,
+  ShieldAlert,
 } from 'lucide-react';
 import { VoiceName, DeliveryStyle, GeneratedClip, VoiceOption, VoiceProject } from './types';
 import {
@@ -33,6 +36,11 @@ import { Navbar } from './components/Navbar';
 import { VoiceLab } from './components/VoiceLab';
 import { CommunityVoices } from './components/CommunityVoices';
 import { ProjectsTab } from './components/ProjectsTab';
+import { ApiKeyModal } from './components/ApiKeyModal';
+import {
+  speakWithBrowser,
+  stopBrowserSpeech,
+} from './utils/browserSpeech';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'studio' | 'lab' | 'community' | 'projects' | 'history'>('studio');
@@ -46,6 +54,17 @@ export default function App() {
   const [isQuotaExceeded, setIsQuotaExceeded] = useState(false);
   const [retryCountdown, setRetryCountdown] = useState<number | null>(null);
 
+  // Engine Mode: 'gemini' (HD neural cloud) or 'browser' (unlimited/zero quota)
+  const [engineMode, setEngineMode] = useState<'gemini' | 'browser'>('gemini');
+  const [customApiKey, setCustomApiKey] = useState<string>(() => {
+    try {
+      return localStorage.getItem('custom_gemini_api_key') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+
   const [currentAudioUrl, setCurrentAudioUrl] = useState<string | null>(null);
   const [currentClip, setCurrentClip] = useState<GeneratedClip | null>(null);
   const [history, setHistory] = useState<GeneratedClip[]>([]);
@@ -57,6 +76,48 @@ export default function App() {
   const [customVoices, setCustomVoices] = useState<VoiceOption[]>([]);
   const [communityVoices, setCommunityVoices] = useState<VoiceOption[]>(INITIAL_COMMUNITY_VOICES);
   const [projects, setProjects] = useState<VoiceProject[]>([]);
+  const [isBrowserSpeaking, setIsBrowserSpeaking] = useState(false);
+
+  const handleSaveApiKey = (key: string) => {
+    setCustomApiKey(key);
+    try {
+      if (key) {
+        localStorage.setItem('custom_gemini_api_key', key);
+      } else {
+        localStorage.removeItem('custom_gemini_api_key');
+      }
+    } catch (e) {
+      console.warn('LocalStorage error:', e);
+    }
+  };
+
+  const handleClearApiKey = () => {
+    setCustomApiKey('');
+    try {
+      localStorage.removeItem('custom_gemini_api_key');
+    } catch (e) {
+      console.warn('LocalStorage error:', e);
+    }
+  };
+
+  const handleSpeakBrowser = (overrideText?: string) => {
+    const textToSpeak = (overrideText || inputText).trim();
+    if (!textToSpeak) return;
+
+    if (isBrowserSpeaking) {
+      stopBrowserSpeech();
+      setIsBrowserSpeaking(false);
+      return;
+    }
+
+    speakWithBrowser(textToSpeak, {
+      rate: selectedStyle === 'calm' ? 0.85 : selectedStyle === 'cheerful' ? 1.15 : 1.0,
+      pitch: selectedVoice === 'Charon' ? 0.8 : selectedVoice === 'Zephyr' ? 1.15 : 1.0,
+      onStart: () => setIsBrowserSpeaking(true),
+      onEnd: () => setIsBrowserSpeaking(false),
+      onError: () => setIsBrowserSpeaking(false),
+    });
+  };
 
   // Rate limit cooldown timer countdown
   useEffect(() => {
@@ -195,7 +256,7 @@ export default function App() {
       return;
     }
 
-    if (retryCountdown && retryCountdown > 0) {
+    if (retryCountdown && retryCountdown > 0 && engineMode === 'gemini') {
       return;
     }
 
@@ -204,32 +265,66 @@ export default function App() {
     setIsQuotaExceeded(false);
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+
       const response = await fetch('/api/tts', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        signal: controller.signal,
         body: JSON.stringify({
           text: trimmedText,
           voice: selectedVoice,
           style: selectedStyle,
+          customApiKey: customApiKey?.trim() || undefined,
         }),
       });
+
+      clearTimeout(timeoutId);
 
       const data = await response.json();
 
       if (!response.ok || !data.success) {
         if (response.status === 429 || data.isRateLimit) {
           setIsQuotaExceeded(true);
-          const cooldown = Number(data.retryAfter) || 60;
+          const cooldown = Number(data.retryAfter) || 25;
           setRetryCountdown(cooldown);
-          throw new Error(data.error || `Speech synthesis quota temporarily reached. Please wait ${cooldown} seconds before retrying.`);
+          setErrorMsg(
+            `Gemini TTS quota limit reached (${cooldown}s cooldown). Click 'Instant Preview' to hear it spoken aloud right now, or wait ${cooldown}s.`
+          );
+          return;
         }
-        throw new Error(data.error || 'Failed to generate speech. Please try again.');
+
+        const rawErr = String(data.error || '');
+        const isMissingKey =
+          data.isMissingApiKey ||
+          rawErr.includes('GEMINI_API_KEY') ||
+          rawErr.includes('API_KEY is missing') ||
+          rawErr.includes('API key');
+
+        if (isMissingKey) {
+          // Automatic seamless switch to Browser Voice Engine so voice generation never fails
+          setEngineMode('browser');
+          setIsQuotaExceeded(false);
+          setErrorMsg(
+            'GEMINI_API_KEY is not configured in your Vercel Project Settings. Switched to Unlimited Browser Voice Engine — speaking your text now! To use Gemini 3.8 Cloud Neural voices, add GEMINI_API_KEY in Vercel or click "Enter Personal Gemini Key" below.'
+          );
+          handleSpeakBrowser(trimmedText);
+          return;
+        }
+
+        setErrorMsg(data.error || 'Failed to generate speech. Please try again.');
+        return;
       }
 
       setRetryCountdown(null);
       setIsQuotaExceeded(false);
+
+      if (!data.audioBase64) {
+        throw new Error('No audio data returned from voice engine.');
+      }
 
       const audioDataUrl = `data:audio/wav;base64,${data.audioBase64}`;
       const newClip: GeneratedClip = {
@@ -238,8 +333,8 @@ export default function App() {
         voice: data.voice || selectedVoice,
         style: data.style || selectedStyle,
         audioUrl: audioDataUrl,
-        duration: data.duration || 5,
-        byteSize: data.byteSize || 0,
+        duration: data.duration || 4,
+        byteSize: data.byteSize || Math.round((data.duration || 4) * 48000),
         createdAt: Date.now(),
       };
 
@@ -247,8 +342,17 @@ export default function App() {
       setCurrentClip(newClip);
       saveHistory([newClip, ...history]);
     } catch (err: any) {
-      console.error('Error calling TTS endpoint:', err);
-      let friendlyError = err.message || 'An unexpected error occurred while contacting the TTS service.';
+      let friendlyError = 'An unexpected error occurred while contacting the TTS service.';
+      if (err?.name === 'AbortError') {
+        friendlyError = 'Request timed out after 60s. Please try with a slightly shorter text.';
+      } else if (err?.message === 'Failed to fetch' || err?.message?.includes('fetch')) {
+        friendlyError = 'Unable to reach the speech service. Switched to Unlimited Browser Voice Engine — speaking now!';
+        setEngineMode('browser');
+        handleSpeakBrowser(trimmedText);
+      } else if (err?.message) {
+        friendlyError = err.message;
+      }
+
       try {
         const jsonMatch = friendlyError.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
@@ -260,6 +364,14 @@ export default function App() {
       } catch {
         // fallback
       }
+
+      if (friendlyError.includes('GEMINI_API_KEY') || friendlyError.includes('API_KEY is missing')) {
+        setEngineMode('browser');
+        handleSpeakBrowser(trimmedText);
+        friendlyError =
+          'GEMINI_API_KEY is missing on your server. Switched to Unlimited Browser Voice Engine — speaking now! You can add your API key in Settings or Vercel Environment Variables.';
+      }
+
       setErrorMsg(friendlyError);
     } finally {
       setIsLoading(false);
@@ -303,6 +415,10 @@ export default function App() {
         setActiveTab={setActiveTab}
         customVoicesCount={customVoices.length}
         communityVoicesCount={communityVoices.length}
+        onOpenApiKeyModal={() => setShowApiKeyModal(true)}
+        hasCustomApiKey={Boolean(customApiKey)}
+        engineMode={engineMode}
+        setEngineMode={setEngineMode}
       />
 
       {/* Main Content Router */}
@@ -396,17 +512,25 @@ export default function App() {
             </div>
           </div>
 
-          {/* Rate limit / Error Banner */}
+          {/* Rate limit / Error / Missing API Key Banner */}
           {errorMsg && (
-            <div className={`p-4 rounded-2xl border flex items-start gap-3 text-sm animate-shake ${
+            <div className={`p-4 rounded-2xl border flex items-start gap-3 text-sm animate-fadeIn shadow-lg ${
               isQuotaExceeded
                 ? 'bg-amber-500/10 border-amber-500/30 text-amber-200'
-                : 'bg-rose-500/10 border-rose-500/30 text-rose-200'
+                : errorMsg.includes('GEMINI_API_KEY')
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-100'
+                  : 'bg-rose-500/10 border-rose-500/30 text-rose-200'
             }`}>
               <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5 text-amber-400" />
               <div className="flex-1">
-                <p className="font-semibold">{isQuotaExceeded ? 'Speech Synthesis Quota Cooling Down' : 'Synthesis Error'}</p>
-                <p className="text-xs mt-0.5 opacity-90">{errorMsg}</p>
+                <p className="font-semibold">
+                  {isQuotaExceeded
+                    ? 'Gemini Daily Quota Cooling Down'
+                    : errorMsg.includes('GEMINI_API_KEY')
+                      ? 'Gemini API Key Notice'
+                      : 'Voice Synthesis Notice'}
+                </p>
+                <p className="text-xs mt-0.5 opacity-90 leading-relaxed">{errorMsg}</p>
                 {retryCountdown !== null && retryCountdown > 0 && (
                   <div className="mt-2.5 flex items-center gap-2">
                     <div className="h-1.5 flex-1 bg-zinc-800 rounded-full overflow-hidden">
@@ -420,6 +544,36 @@ export default function App() {
                     </span>
                   </div>
                 )}
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEngineMode('browser');
+                      setErrorMsg(null);
+                      setIsQuotaExceeded(false);
+                      handleSpeakBrowser();
+                    }}
+                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-500 text-zinc-950 hover:bg-emerald-400 font-bold text-xs transition-all shadow-md"
+                  >
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>Use Unlimited Browser Voice (Zero Quota)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKeyModal(true)}
+                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-amber-300 font-semibold text-xs border border-amber-500/30 transition-all"
+                  >
+                    <Key className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Enter Personal Gemini Key</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setErrorMsg(null)}
+                    className="px-3 py-2 rounded-xl text-xs text-zinc-400 hover:text-white transition-all ml-auto"
+                  >
+                    Dismiss
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -484,6 +638,57 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Engine Mode Toggle Selector */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-1.5 bg-zinc-950/80 border border-zinc-800 rounded-2xl">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEngineMode('browser');
+                    setErrorMsg(null);
+                    setIsQuotaExceeded(false);
+                  }}
+                  className={`p-3 rounded-xl text-left transition-all flex items-start gap-3 border ${
+                    engineMode === 'browser'
+                      ? 'bg-emerald-500/15 border-emerald-500/40 text-white shadow-lg shadow-emerald-500/10'
+                      : 'hover:bg-zinc-900 text-zinc-400 border-transparent'
+                  }`}
+                >
+                  <div className={`p-2 rounded-lg mt-0.5 ${engineMode === 'browser' ? 'bg-emerald-500 text-zinc-950' : 'bg-zinc-900 text-zinc-400'}`}>
+                    <Zap className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-white">Browser Voice Engine</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold">Unlimited</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">Zero rate limits, instant speech, supports Sinhala & OS voices</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setEngineMode('gemini')}
+                  className={`p-3 rounded-xl text-left transition-all flex items-start gap-3 border ${
+                    engineMode === 'gemini'
+                      ? 'bg-amber-500/15 border-amber-500/40 text-white shadow-lg shadow-amber-500/10'
+                      : 'hover:bg-zinc-900 text-zinc-400 border-transparent'
+                  }`}
+                >
+                  <div className={`p-2 rounded-lg mt-0.5 ${engineMode === 'gemini' ? 'bg-amber-500 text-zinc-950' : 'bg-zinc-900 text-zinc-400'}`}>
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-white">Gemini 3.8 Neural Voice</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-semibold">24kHz HD</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      {customApiKey ? 'Personal API Key Active' : 'Active High-Fidelity Studio Voice'}
+                    </p>
+                  </div>
+                </button>
+              </div>
+
               <div className="relative">
                 <textarea
                   value={inputText}
@@ -498,32 +703,62 @@ export default function App() {
               </div>
 
               {/* Generate Speech Button */}
-              <button
-                onClick={handleGenerateTTS}
-                disabled={isLoading || (retryCountdown !== null && retryCountdown > 0)}
-                className={`w-full py-4 rounded-2xl font-bold transition-all shadow-xl flex items-center justify-center gap-3 text-base ${
-                  isLoading || (retryCountdown !== null && retryCountdown > 0)
-                    ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700'
-                    : 'bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-zinc-950 hover:from-amber-400 hover:to-orange-400 shadow-amber-500/25 ring-1 ring-white/20'
-                }`}
-              >
-                {isLoading ? (
-                  <>
-                    <RefreshCw className="w-5 h-5 animate-spin text-zinc-400" />
-                    <span>Synthesizing Voice Audio...</span>
-                  </>
-                ) : retryCountdown !== null && retryCountdown > 0 ? (
-                  <>
-                    <AlertCircle className="w-5 h-5 text-amber-400" />
-                    <span>Rate limit cooling down ({retryCountdown}s)...</span>
-                  </>
-                ) : (
-                  <>
-                    <Volume2 className="w-5 h-5" />
-                    <span>Generate Speech Audio</span>
-                  </>
-                )}
-              </button>
+              <div className="space-y-2">
+                <button
+                  onClick={() => {
+                    if (engineMode === 'browser') {
+                      handleSpeakBrowser();
+                    } else {
+                      handleGenerateTTS();
+                    }
+                  }}
+                  disabled={isLoading || (engineMode === 'gemini' && retryCountdown !== null && retryCountdown > 0)}
+                  className={`w-full py-4 rounded-2xl font-bold transition-all shadow-xl flex items-center justify-center gap-3 text-base ${
+                    isLoading || (engineMode === 'gemini' && retryCountdown !== null && retryCountdown > 0)
+                      ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700'
+                      : engineMode === 'browser'
+                        ? 'bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 text-zinc-950 hover:from-emerald-400 hover:to-teal-400 shadow-emerald-500/25 ring-1 ring-white/20'
+                        : 'bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-zinc-950 hover:from-amber-400 hover:to-orange-400 shadow-amber-500/25 ring-1 ring-white/20'
+                  }`}
+                >
+                  {isLoading ? (
+                    <>
+                      <RefreshCw className="w-5 h-5 animate-spin text-zinc-950" />
+                      <span>Synthesizing Voice Audio (Gemini 3.8)...</span>
+                    </>
+                  ) : engineMode === 'browser' ? (
+                    <>
+                      <Zap className="w-5 h-5 text-zinc-950" />
+                      <span>{isBrowserSpeaking ? '■ Stop Browser Speech' : '▶ Speak with Browser Voice'}</span>
+                    </>
+                  ) : retryCountdown !== null && retryCountdown > 0 ? (
+                    <>
+                      <AlertCircle className="w-5 h-5 text-amber-400" />
+                      <span>Gemini Quota Cooling Down ({retryCountdown}s)...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Volume2 className="w-5 h-5" />
+                      <span>Generate Neural Speech Audio (24kHz WAV)</span>
+                    </>
+                  )}
+                </button>
+
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[11px] text-zinc-500 font-mono flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${engineMode === 'browser' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                    <span>Engine: {engineMode === 'browser' ? 'Web Speech API (Browser)' : 'Gemini 3.8 Flash Neural (HD)'}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleSpeakBrowser()}
+                    className="text-xs text-zinc-400 hover:text-white font-medium flex items-center gap-1.5 transition-colors py-1 px-2 rounded-lg hover:bg-zinc-800/60"
+                  >
+                    <Volume2 className="w-3.5 h-3.5" />
+                    <span>{isBrowserSpeaking ? 'Stop Preview' : 'Instant Preview'}</span>
+                  </button>
+                </div>
+              </div>
 
               {/* Active Audio Player Deck */}
               {currentAudioUrl ? (
@@ -604,6 +839,15 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* Gemini API Key Configuration Modal */}
+      <ApiKeyModal
+        isOpen={showApiKeyModal}
+        onClose={() => setShowApiKeyModal(false)}
+        apiKey={customApiKey}
+        onSaveKey={handleSaveApiKey}
+        onClearKey={handleClearApiKey}
+      />
     </div>
   );
 }

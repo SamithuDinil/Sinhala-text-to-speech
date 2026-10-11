@@ -9,25 +9,42 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
+// Enable CORS and preflight handling for all requests
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, x-gemini-api-key");
+  if (req.method === "OPTIONS") {
+    res.sendStatus(204);
+    return;
+  }
+  next();
+});
+
 app.use(express.json({ limit: "10mb" }));
 
-let aiClient: GoogleGenAI | null = null;
-function getGenAI(): GoogleGenAI {
-  if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEY is missing. Please add GEMINI_API_KEY in your Vercel Project Settings -> Environment Variables or local .env file.");
-    }
-    aiClient = new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          "User-Agent": "aistudio-build",
-        },
+function getEffectiveApiKey(customKey?: string): string | null {
+  const trimmed = customKey?.trim();
+  if (trimmed) return trimmed;
+  return (
+    process.env.GEMINI_API_KEY ||
+    process.env.API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.GEMINI_KEY ||
+    process.env.VITE_GEMINI_API_KEY ||
+    null
+  );
+}
+
+function getGenAI(apiKey: string): GoogleGenAI {
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        "User-Agent": "aistudio-build",
       },
-    });
-  }
-  return aiClient;
+    },
+  });
 }
 
 /**
@@ -130,14 +147,22 @@ function parseGeminiError(error: any): { isRateLimit: boolean; message: string; 
 }
 
 const TTS_MODELS = [
-  "gemini-2.5-flash-preview-tts",
-  "gemini-3.1-flash-tts-preview",
+  "gemini-3.8-flash-tts",
+  "gemini-3.8-flash-lite-tts",
   "gemini-2.5-pro-preview-tts",
+  "gemini-3.1-flash-tts-preview",
+  "gemini-2.5-flash-preview-tts",
 ];
 
 // Health check endpoint
 app.get("/api/health", (_req: Request, res: Response) => {
-  const hasApiKey = Boolean(process.env.GEMINI_API_KEY || process.env.API_KEY);
+  const hasApiKey = Boolean(
+    process.env.GEMINI_API_KEY ||
+    process.env.API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.GEMINI_KEY ||
+    process.env.VITE_GEMINI_API_KEY
+  );
   res.json({ status: "ok", hasApiKey, models: TTS_MODELS });
 });
 
@@ -173,7 +198,20 @@ app.post("/api/tts", async (req: Request, res: Response) => {
       return;
     }
 
-    const ai = getGenAI();
+    const customKey = (req.headers["x-gemini-api-key"] as string) || req.body?.customApiKey;
+    const apiKey = getEffectiveApiKey(customKey);
+
+    if (!apiKey) {
+      res.status(200).json({
+        success: false,
+        isMissingApiKey: true,
+        fallbackToBrowser: true,
+        error: "GEMINI_API_KEY is not configured on the server. The app has switched to Unlimited Browser Voice Engine so you can speak immediately!",
+      });
+      return;
+    }
+
+    const ai = getGenAI(apiKey);
 
     // Format prompt text with optional tone guidance for expressiveness
     let promptContent = text.trim();
@@ -215,7 +253,6 @@ app.post("/api/tts", async (req: Request, res: Response) => {
         }
       } catch (err: any) {
         lastError = err;
-        console.warn(`TTS attempt with ${modelName} failed, trying fallback:`, err?.message || err);
       }
     }
 
@@ -259,12 +296,16 @@ app.post("/api/tts", async (req: Request, res: Response) => {
       modelUsed: successfulModel,
     });
   } catch (error: any) {
-    console.error("TTS generation error:", error);
     const parsed = parseGeminiError(error);
+    if (!parsed.isRateLimit) {
+      console.error("TTS generation error:", error);
+    }
     res.status(parsed.isRateLimit ? 429 : 500).json({
+      success: false,
       error: parsed.message,
       isRateLimit: parsed.isRateLimit,
       retryAfter: parsed.retryAfter,
+      fallbackToBrowser: true,
     });
   }
 });

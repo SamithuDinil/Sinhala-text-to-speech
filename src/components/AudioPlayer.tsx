@@ -28,12 +28,18 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || !audioUrl) return;
 
     audio.currentTime = 0;
     setCurrentTime(0);
-    setIsPlaying(false);
     audio.playbackRate = playbackRate;
+
+    // Auto-play the freshly generated voice audio
+    audio.play().then(() => {
+      setIsPlaying(true);
+    }).catch(() => {
+      setIsPlaying(false);
+    });
 
     const handleLoadedMetadata = () => {
       if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
