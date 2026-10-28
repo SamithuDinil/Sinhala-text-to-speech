@@ -79,7 +79,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const allowedVoices = ['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr'];
-    const selectedVoice = allowedVoices.includes(voice) ? voice : 'Kore';
+    let selectedVoice = 'Kore';
+    let customPromptInstruction = '';
+
+    if (allowedVoices.includes(voice)) {
+      selectedVoice = voice;
+    } else if (voice === 'young-girl-sinhala') {
+      selectedVoice = 'Zephyr';
+      customPromptInstruction = 'Read with a very light, high-pitched, cheerful young girl voice and natural Sinhala cadence.';
+    } else if (voice === 'community-mahinda-narrator') {
+      selectedVoice = 'Charon';
+      customPromptInstruction = 'Read with deep reverence, deliberate pauses, and rich historical gravitas.';
+    } else if (voice === 'community-anula-host') {
+      selectedVoice = 'Zephyr';
+      customPromptInstruction = 'Speak with a bright, warm, and approachable conversational rhythm.';
+    } else if (voice === 'community-zen-master') {
+      selectedVoice = 'Fenrir';
+      customPromptInstruction = 'Read exceptionally gently, softly, and with long relaxing pauses between phrases.';
+    } else {
+      selectedVoice = 'Zephyr';
+    }
 
     const customKey = (req.headers['x-gemini-api-key'] as string) || req.body?.customApiKey;
     const apiKey = getEffectiveApiKey(customKey);
@@ -96,6 +115,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ai = getGenAI(apiKey);
 
     let promptContent = text.trim();
+    if (customPromptInstruction) {
+      promptContent = `${customPromptInstruction} ${promptContent}`;
+    }
     if (style === 'storytelling') {
       promptContent = `Read with rich warmth, immersive pacing, and clear emotional storytelling: ${promptContent}`;
     } else if (style === 'cheerful') {

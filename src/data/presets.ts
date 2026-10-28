@@ -14,6 +14,14 @@ export interface PresetText {
 
 export const PRESET_TEXTS: PresetText[] = [
   {
+    id: 'young-girl-sinhala-chat',
+    title: 'Young Girl Sinhala Talking',
+    languageBadge: 'සිංහල Sinhala (Young Girl)',
+    text: 'ආයුබෝවන්! අද මම පාසැලේ ගීත ගායනා කළා. මම අද ගොඩාක් සතුටින් ඉන්නේ. අද හරිම ලස්සන දවසක්!',
+    recommendedVoice: 'young-girl-sinhala',
+    recommendedStyle: 'cheerful',
+  },
+  {
     id: 'sri-lanka-intro',
     title: 'Sri Lanka Heritage Intro',
     languageBadge: 'සිංහල Sinhala',
@@ -99,6 +107,20 @@ export const GEMINI_VOICES: VoiceOption[] = [
 ];
 
 export const INITIAL_COMMUNITY_VOICES: VoiceOption[] = [
+  {
+    id: 'young-girl-sinhala',
+    name: 'Nethmi - Young Girl (Sinhala)',
+    gender: 'Female',
+    character: 'Very Light & Youthful',
+    description: 'High-pitched, light, cheerful young girl voice optimized for expressive Sinhala talking and storytelling.',
+    toneTag: 'Youthful / Sinhala',
+    isCustom: true,
+    baseVoice: 'Zephyr',
+    accent: 'Sinhala / Bilingual',
+    creator: 'VoiceCraft Studio',
+    likes: 954,
+    promptInstructions: 'Read with a very light, high-pitched, cheerful young girl voice and natural Sinhala cadence.',
+  },
   {
     id: 'community-mahinda-narrator',
     name: 'Lankan Epic Narrator',

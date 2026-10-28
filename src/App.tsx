@@ -111,8 +111,8 @@ export default function App() {
     }
 
     speakWithBrowser(textToSpeak, {
-      rate: selectedStyle === 'calm' ? 0.85 : selectedStyle === 'cheerful' ? 1.15 : 1.0,
-      pitch: selectedVoice === 'Charon' ? 0.8 : selectedVoice === 'Zephyr' ? 1.15 : 1.0,
+      rate: selectedVoice === 'young-girl-sinhala' ? 1.15 : selectedStyle === 'calm' ? 0.85 : selectedStyle === 'cheerful' ? 1.15 : 1.0,
+      pitch: selectedVoice === 'young-girl-sinhala' ? 1.6 : selectedVoice === 'Charon' ? 0.8 : selectedVoice === 'Zephyr' ? 1.15 : 1.0,
       onStart: () => setIsBrowserSpeaking(true),
       onEnd: () => setIsBrowserSpeaking(false),
       onError: () => setIsBrowserSpeaking(false),
